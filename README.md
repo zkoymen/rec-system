@@ -11,7 +11,7 @@ The project grows through small, always-working versions:
 4. **v4** — add a ranking layer to score and sort candidates.
 5. **v5** — improve serving structure, logging, and health checks.
 
-## Quickstart (v1)
+## Quickstart
 
 ```bash
 pip install -r requirements.txt
@@ -19,11 +19,22 @@ python -m src.train                       # downloads data, trains, saves models
 uvicorn src.api:app --reload              # serve the API
 ```
 
+**Predict** the score for one user/item pair:
+
 ```bash
 curl -X POST http://127.0.0.1:8000/predict \
   -H "Content-Type: application/json" \
   -d '{"user_id": 1, "item_id": 1}'
 # -> {"user_id": 1, "item_id": 1, "score": 0.92}
+```
+
+**Recommend** the top items for a user:
+
+```bash
+curl -X POST http://127.0.0.1:8000/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": 1, "top_k": 5}'
+# -> {"user_id": 1, "items": [{"item_id": 596, "score": 0.99}, ...]}
 ```
 
 ## Tech Stack
