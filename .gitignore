@@ -1,0 +1,20 @@
+# Project docs (kept local only)
+docs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Models and data artifacts
+models/
+*.pt
+data/*.csv
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
