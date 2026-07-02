@@ -32,3 +32,20 @@ class MFModel(nn.Module):
     def predict(self, user_idx: torch.Tensor, item_idx: torch.Tensor) -> torch.Tensor:
         """Return like-probability in [0, 1]."""
         return torch.sigmoid(self.forward(user_idx, item_idx))
+
+    @torch.no_grad()
+    def rank_items(self, user_idx: int, candidate_item_idx: torch.Tensor, k: int):
+        """Score candidate items for one user and return the top-k.
+
+        This is the "ranking" step: given a user and a set of candidate items,
+        score them all in one batch and keep the highest. In later versions the
+        candidate set will come from a separate recall layer instead of being
+        every item.
+
+        Returns (top_item_idx, top_scores), both 1-D tensors of length <= k.
+        """
+        users = torch.full_like(candidate_item_idx, user_idx)
+        scores = self.predict(users, candidate_item_idx)
+        k = min(k, candidate_item_idx.numel())
+        top_scores, top_pos = torch.topk(scores, k)
+        return candidate_item_idx[top_pos], top_scores

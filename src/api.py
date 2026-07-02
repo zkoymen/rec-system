@@ -1,4 +1,4 @@
-"""FastAPI backend serving the v1 recommender.
+"""FastAPI backend serving the recommender (v1: /predict, v2: /recommend).
 
 The model is loaded once at startup (not per request) and reused for every call.
 
@@ -12,7 +12,13 @@ from fastapi import FastAPI, HTTPException
 
 from . import config
 from .model import MFModel
-from .schemas import PredictRequest, PredictResponse
+from .schemas import (
+    PredictRequest,
+    PredictResponse,
+    RecommendedItem,
+    RecommendRequest,
+    RecommendResponse,
+)
 
 # Holds the loaded model and id mappings for the lifetime of the process.
 state: dict = {}
@@ -31,6 +37,10 @@ def load_model() -> None:
     state["model"] = model
     state["user2idx"] = ckpt["user2idx"]
     state["item2idx"] = ckpt["item2idx"]
+    # Reverse map (index -> item_id) to translate model outputs back to real ids.
+    state["idx2item"] = {idx: item_id for item_id, idx in ckpt["item2idx"].items()}
+    # Candidate pool for v2: every known item. A recall layer replaces this in v3.
+    state["all_item_idx"] = torch.arange(ckpt["num_items"], dtype=torch.long)
 
 
 @asynccontextmanager
@@ -40,7 +50,7 @@ async def lifespan(app: FastAPI):
     state.clear()
 
 
-app = FastAPI(title="rec-system", version="1.0", lifespan=lifespan)
+app = FastAPI(title="rec-system", version="2.0", lifespan=lifespan)
 
 
 @app.post("/predict", response_model=PredictResponse)
@@ -59,3 +69,26 @@ def predict(req: PredictRequest) -> PredictResponse:
         score = state["model"].predict(u, i).item()
 
     return PredictResponse(user_id=req.user_id, item_id=req.item_id, score=score)
+
+
+@app.post("/recommend", response_model=RecommendResponse)
+def recommend(req: RecommendRequest) -> RecommendResponse:
+    user2idx = state["user2idx"]
+    if req.user_id not in user2idx:
+        raise HTTPException(status_code=404, detail=f"Unknown user_id: {req.user_id}")
+    if req.top_k < 1:
+        raise HTTPException(status_code=400, detail="top_k must be >= 1")
+
+    # v2 candidate list = all items. Score them, keep the top_k highest.
+    top_idx, top_scores = state["model"].rank_items(
+        user_idx=user2idx[req.user_id],
+        candidate_item_idx=state["all_item_idx"],
+        k=req.top_k,
+    )
+
+    idx2item = state["idx2item"]
+    items = [
+        RecommendedItem(item_id=idx2item[int(idx)], score=float(score))
+        for idx, score in zip(top_idx.tolist(), top_scores.tolist())
+    ]
+    return RecommendResponse(user_id=req.user_id, items=items)

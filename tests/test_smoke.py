@@ -30,3 +30,20 @@ def test_schemas_roundtrip():
     assert req.user_id == 1
     resp = PredictResponse(user_id=1, item_id=2, score=0.5)
     assert resp.score == 0.5
+
+
+def test_rank_items_returns_top_k():
+    model = MFModel(num_users=10, num_items=20, embedding_dim=8)
+    candidates = torch.arange(20)
+    top_idx, top_scores = model.rank_items(user_idx=3, candidate_item_idx=candidates, k=5)
+    assert top_idx.shape == (5,)
+    assert top_scores.shape == (5,)
+    # Scores must be sorted in descending order.
+    assert all(top_scores[i] >= top_scores[i + 1] for i in range(len(top_scores) - 1))
+
+
+def test_rank_items_k_larger_than_candidates():
+    model = MFModel(num_users=10, num_items=20, embedding_dim=8)
+    candidates = torch.arange(3)
+    top_idx, _ = model.rank_items(user_idx=0, candidate_item_idx=candidates, k=10)
+    assert top_idx.shape == (3,)
